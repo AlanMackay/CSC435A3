@@ -24,19 +24,36 @@ public class TypeChecking {
 		    return true;
 		if (srcTyp == Type.unknownType) return true;
 
+		// Assignment of nil to pointer variables
+		if (srcTyp instanceof Type.Pointer && destTyp instanceof Type.Pointer){
+			if( ((Type.Pointer)srcTyp).getBaseType() == Type.anyType){
+				return true;
+			}
+		}
+
 		assert srcTyp != null;
 		assert destTyp != null;
 
 		// handle case when src is an untyped numeric constant
 		if (srcTyp instanceof Type.UntypedNumber) {
 			if (destTyp instanceof Type.Flt) return true;
+
 			if (!(destTyp instanceof Type.Int || destTyp instanceof Type.Uint))
 				return false;
-			// should check whether the number will fit into the particular size
-			// of int provided for destTyp
+
+			// check whether the number will fit into the particular size of int provided for destTyp
+			long number = ((Type.UntypedNumber)srcTyp).getIntValue(); // Untyped source number
+			long minValue = -((long)1 << ( ((Type.Int)destTyp).getSize() - 1) ); // -(2^(destTyp size - 1))
+			long maxValue = ((long)1 << ( ((Type.Int)destTyp).getSize() - 1) ) - 1; // 2^(destTyp size - 1) - 1
+
+			// Print error if overflow occurs
+			if(number < minValue || number > maxValue){
+				ReportError.error(ctx, "Untyped number (" + number + ") overflows " + destTyp);
+				return false;
+			}
+
 			return ((Type.UntypedNumber)srcTyp).isInteger();
 		}
-
 	
 		// handle initialization of an array or slice
 		// Note: this code should be expanded to also handle the destination
@@ -52,12 +69,13 @@ public class TypeChecking {
 					if (!checkAssignability(et,t,ctx)) return false;
 				}
 				return true;
-			}
-			if(destTyp instanceof Type.TypeList){
-				Type[] lt = ((Type.TypeList)destTyp).getTypes();
-				Type[] rt = ((Type.TypeList)srcTyp).getTypes();
-				for(int i = 0; i < lt.length; i++){
-					if(!checkAssignability(lt[i], rt[i], ctx)) return false;
+			} else if (destTyp instanceof Type.TypeList){
+
+				Type[] destTypes = ((Type.TypeList)srcTyp).getTypes();
+				int i = 0;
+				for( Type t : ((Type.TypeList)srcTyp).getTypes() ) {
+					if (!checkAssignability(destTypes[i],t,ctx)) return false;
+					i++;
 				}
 				return true;
 			}
@@ -112,8 +130,12 @@ public class TypeChecking {
  			Type.Pointer bb = (Type.Pointer)b;
  			return aa.getBaseType() == bb.getBaseType();
  		}
+ 		if (a instanceof Type.Pointer) {
+ 			Type.Pointer aa = (Type.Pointer)a;
+ 			Type.Pointer bb = (Type.Pointer)b;
+ 			return aa.getBaseType() == bb.getBaseType();
+ 		}
  		// does that cover all the cases?
-
  		return false;
  	}
  	
@@ -189,7 +211,6 @@ public class TypeChecking {
  	// Report an error if the operator is not applicable to the operand types;
  	// return the type of the result
     public static Type checkBinOp(Type lhs, Type rhs, String op, ParserRuleContext ctx) {
-    	System.out.println(lhs + " " + rhs);
     	// very much code is missing here!
     	if(!(checkAssignability(lhs, rhs, ctx) || (lhs instanceof Type.UntypedNumber && rhs instanceof Type.UntypedNumber))){
     		ReportError.error(ctx, "Left hand side (" + lhs + ") cannot be assigned right hand side (" + rhs + ")");
@@ -343,8 +364,65 @@ public class TypeChecking {
  	// Report an error if the operator is not applicable to the operand type;
  	// return the type of the result
     public static Type checkUnaryOp(Type opnd, String op, ParserRuleContext ctx) {
-    	// very much code is missing here!
-    	return Type.unknownType;
+
+		switch (op) {
+	        case "+":  
+				if (!(opnd instanceof Type.Int || opnd instanceof Type.Uint || opnd instanceof Type.UntypedNumber || opnd instanceof Type.Flt))
+					ReportError.error(ctx, "The operator \"" + op +"\" can not be used on type " + opnd);
+				else
+					return opnd; // Operand type does not change
+	            break;
+	        case "-":  
+	        	if (opnd instanceof Type.UntypedNumber){
+	        		// Constant folding: -2 => 0-2
+	            	if (((Type.UntypedNumber)opnd).isInteger()){ // Integer value
+	            		String result = String.valueOf(0 - (((Type.UntypedNumber)opnd).getIntValue()) );
+	            		return Type.newUntypedNumber(result);
+
+	            		//isPossibleDouble
+
+	            	}
+	            	else { // Floating-point value
+	            		String result = String.valueOf(0 - (((Type.UntypedNumber)opnd).getDoubleValue()) );
+	            		return Type.newUntypedNumber(result);	            		
+	            	}
+	            }
+				if (!(opnd instanceof Type.Int || opnd instanceof Type.Uint || opnd instanceof Type.Flt))
+					ReportError.error(ctx, "The operator \"" + op +"\" can not be used on type " + opnd);
+				else
+					return opnd; // Operand type does not change
+	        	break;
+	        case "!":  
+				if (opnd != Type.boolType) 
+					ReportError.error(ctx, "The operator \"" + op +"\" can not be used on type " + opnd);
+				else
+					return opnd; // Operand type does not change
+	            break;  
+	        case "^": 
+	        	if(opnd instanceof Type.UntypedNumber && ((Type.UntypedNumber)opnd).isInteger() 
+	        		&& !((Type.UntypedNumber)opnd).isPossibleDouble()){
+	        		// Constant folding
+	        		String result = String.valueOf( -1 ^ (((Type.UntypedNumber)opnd).getIntValue()) );
+	        		return Type.newUntypedNumber(result);
+	        	}
+	        	if (!(opnd instanceof Type.Int || opnd instanceof Type.Uint)) 
+					ReportError.error(ctx, "The operator \"" + op +"\" can not be used on type " + opnd);
+				else
+					return opnd; // Operand type does not change
+	            break;  
+	        case "*": // Below cases are NOT complete!!  
+	        	System.out.println("\t\t* Unary Operation");
+	        	/*if(opnd instanceof Type.Pointer)
+	        		ReportError.error(ctx, "The operator \"" + op +"\" can not be used on type " + opnd);*/
+	            break;                                       
+	        case "&":  
+	        	System.out.println("\t\t& Unary Operation");
+	        	if( !(opnd instanceof Type.Pointer || opnd instanceof Type.Slice))
+	        		ReportError.error(ctx, "The operator \"" + op +"\" can not be used on type " + opnd);
+	            break;                         
+		}
+
+    	return Type.unknownType; // Operator is not applicable to the operand type
     }
 
 }
