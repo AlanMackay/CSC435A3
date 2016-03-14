@@ -207,8 +207,10 @@ public class SymTabVisitor1 extends GooBaseVisitor<Type> {
 		List<Token> ids = ctx.identifierList().idl;
 		GooParser.ConstSpecRemContext csrx = ctx.constSpecRem();
 		Type typ = Type.unknownType;  // use this if type is missing
-		if (csrx != null)
-			typ = visit(csrx.type());
+		if (csrx != null){
+			if(csrx.type() != null)
+				typ = visit(csrx.type());
+		}
 		for( Token t : ids ) {
 			String name = t.getText();
 			Symbol sy = new Symbol(t, Symbol.Kind.Constant, typ, currentScope);
