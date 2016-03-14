@@ -411,12 +411,12 @@ public class TypeChecking {
 					return opnd; // Operand type does not change
 	            break;  
 	        case "*": // Below cases are NOT complete!!  
-	        	System.out.println("\t\t* Unary Operation");
-	        	/*if(opnd instanceof Type.Pointer)
-	        		ReportError.error(ctx, "The operator \"" + op +"\" can not be used on type " + opnd);*/
+	        	if(opnd instanceof Type.Pointer)
+	            	return ((Type.Pointer)opnd).getBaseType();
+	            else 
+	            	ReportError.error(ctx, "The operator \"" + op + "\" can not be used on type " + opnd);
 	            break;                                       
 	        case "&":  
-	        	System.out.println("\t\t& Unary Operation");
 	        	if( !(opnd instanceof Type.Pointer || opnd instanceof Type.Slice))
 	        		ReportError.error(ctx, "The operator \"" + op +"\" can not be used on type " + opnd);
 	            break;                         
